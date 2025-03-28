@@ -1,0 +1,31 @@
+name: Backup Repository  # Name of the GitHub Actions workflow
+
+on:
+  schedule:
+    - cron: '0 0 */3 * *'  # Run every 3 days at midnight UTC (adjust if needed)
+  workflow_dispatch:  # Allow manual execution from GitHub Actions tab
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest  # Runs on an Ubuntu GitHub Actions runner (does NOT depend on your Windows OS)
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3  # Clone the repository into the GitHub Actions runner
+
+    - name: Set up Git
+      run: |
+        git config --global user.name "ZankhanaSavsani"  # Set Git username
+        git config --global user.email "savsanizankhana123@gmail.com"  # Set Git email
+
+    - name: Add backup repository as remote
+      run: |
+        git remote add backup https://ZankhanaSavsani:${{ secrets.GH_BACKUP_TOKEN }}@github.com/ZankhanaSavsani/Internship_Management_System_backup.git || true
+      env:
+        your-github-token: ${{ secrets.GH_BACKUP_TOKEN }}
+      # This step ensures the backup repository is added, but avoids errors if it already exists.
+
+    - name: Push to backup repository
+      run: |
+        git push backup main  # Pushes the main branch to the backup repository
+
