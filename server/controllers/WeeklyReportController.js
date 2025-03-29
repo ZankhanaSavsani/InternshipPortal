@@ -829,128 +829,85 @@ exports.getGuideWeeklyReportById = async (req, res, next) => {
   }
 };
 
-// @desc   Update approval status for a weekly report (guide only)
-// @route  PATCH /api/weeklyReport/guide/:id/approval
-exports.updateGuideApprovalStatus = async (req, res, next) => {
+// Guide-specific notification helper functions
+const notifyStudentAboutGuideStatusChange = async (studentId, studentName, projectTitle, weekNumber, status, comments, reportId) => {
   try {
-    const guideId = req.user._id;
-    const { id } = req.params;
-    const { approvalStatus, comments } = req.body;
-
-    // Validate input
-    if (!approvalStatus || !["Pending", "Approved", "Rejected"].includes(approvalStatus)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid approval status"
-      });
+    let title, message, priority = "medium";
+    
+    if (status === "Approved") {
+      title = "Weekly Report Approved by Guide";
+      message = `Your guide has approved your weekly report for "${projectTitle}" (Week ${weekNumber}).`;
+      priority = "high";
+    } else if (status === "Rejected") {
+      title = "Weekly Report Feedback from Guide";
+      message = `Your guide has provided feedback on your weekly report for "${projectTitle}" (Week ${weekNumber}).`;
+      if (comments) message += ` Feedback: ${comments}`;
+      priority = "high";
+    } else {
+      title = "Weekly Report Status Update";
+      message = `Your guide has updated the status of your weekly report (${projectTitle}, Week ${weekNumber}).`;
     }
 
-    if (approvalStatus === "Rejected" && !comments) {
-      return res.status(400).json({
-        success: false,
-        message: "Comments are required for rejected status"
-      });
-    }
-
-    // Verify the report belongs to a student assigned to this guide
-    const internship = await StudentInternship.findOne({
-      guide: guideId,
-      weeklyReports: id,
-      isDeleted: false
-    });
-
-    if (!internship) {
-      return res.status(404).json({
-        success: false,
-        message: "Weekly report not found or not assigned to you"
-      });
-    }
-
-    // Update the report
-    const report = await WeeklyReport.findOneAndUpdate(
-      { _id: id, isDeleted: false },
-      {
-        approvalStatus,
-        comments: approvalStatus === "Rejected" ? comments : null,
-        approvedBy: guideId,
-        approvalDate: new Date()
+    await Notification.createNotification({
+      sender: {
+        id: process.env.SYSTEM_ADMIN_ID || '000000000000000000000000',
+        model: "Guide",
+        name: "Guide Feedback"
       },
-      { new: true, runValidators: true }
-    );
-
-    if (!report) {
-      return res.status(404).json({
-        success: false,
-        message: "Weekly report not found"
-      });
-    }
-
-    logger.info(`[PATCH /api/weeklyReport/guide/${id}/approval] Updated by guide ${guideId}`);
-    res.status(200).json({
-      success: true,
-      data: report
+      recipients: [{
+        id: studentId,
+        model: "Student"
+      }],
+      title,
+      message,
+      type: "GUIDE_REPORT_FEEDBACK",
+      link: `/student/weekly-reports/${reportId}`,
+      priority,
+      relatedEntity: {
+        id: reportId,
+        model: "WeeklyReport"
+      },
+      statusChange: {
+        to: status,
+        ...(comments && { reason: comments })
+      }
     });
+
+    logger.info(`Guide feedback notification sent to student ${studentId}`);
   } catch (error) {
-    logger.error(`[PATCH /api/weeklyReport/guide/${id}/approval] Error: ${error.message}`);
-    next(error);
+    logger.error(`Error sending guide feedback notification: ${error.message}`);
   }
 };
 
-// @desc   Add marks to a weekly report (guide only)
-// @route  PATCH /api/weeklyReport/guide/:id/marks
-exports.addGuideMarks = async (req, res, next) => {
+const notifyStudentAboutGuideMarks = async (studentId, studentName, projectTitle, weekNumber, marks, reportId) => {
   try {
-    const guideId = req.user._id;
-    const { id } = req.params;
-    const { marks } = req.body;
-
-    // Validate input
-    if (marks === undefined || marks < 0 || marks > 10) {
-      return res.status(400).json({
-        success: false,
-        message: "Marks must be between 0 and 10"
-      });
-    }
-
-    // Verify the report belongs to a student assigned to this guide
-    const internship = await StudentInternship.findOne({
-      guide: guideId,
-      weeklyReports: id,
-      isDeleted: false
-    });
-
-    if (!internship) {
-      return res.status(404).json({
-        success: false,
-        message: "Weekly report not found or not assigned to you"
-      });
-    }
-
-    // Update the marks
-    const report = await WeeklyReport.findOneAndUpdate(
-      { _id: id, isDeleted: false },
-      {
-        marks,
-        markedBy: guideId,
-        markingDate: new Date()
+    await Notification.createNotification({
+      sender: {
+        id: process.env.SYSTEM_ADMIN_ID || '000000000000000000000000',
+        model: "Guide",
+        name: "Guide Evaluation"
       },
-      { new: true }
-    );
-
-    if (!report) {
-      return res.status(404).json({
-        success: false,
-        message: "Weekly report not found"
-      });
-    }
-
-    logger.info(`[PATCH /api/weeklyReport/guide/${id}/marks] Updated by guide ${guideId}`);
-    res.status(200).json({
-      success: true,
-      data: report
+      recipients: [{
+        id: studentId,
+        model: "Student"
+      }],
+      title: "Weekly Report Evaluation",
+      message: `Your guide has evaluated your weekly report on "${projectTitle}" (Week ${weekNumber}) with ${marks}/10.`,
+      type: "GUIDE_REPORT_EVALUATION",
+      link: `/student/weekly-reports/${reportId}`,
+      priority: "high",
+      relatedEntity: {
+        id: reportId,
+        model: "WeeklyReport"
+      },
+      marksData: {
+        marks,
+        week: weekNumber
+      }
     });
+
+    logger.info(`Guide evaluation notification sent to student ${studentId}`);
   } catch (error) {
-    logger.error(`[PATCH /api/weeklyReport/guide/${id}/marks] Error: ${error.message}`);
-    next(error);
+    logger.error(`Error sending guide evaluation notification: ${error.message}`);
   }
 };

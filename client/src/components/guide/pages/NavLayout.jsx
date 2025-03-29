@@ -8,7 +8,6 @@ import {
   LogOut,
   User,
   ChevronDown,
-  ChevronRight,
   Clock,
   Check,
   AlertCircle,
@@ -24,7 +23,7 @@ import { useAuth } from "../../layouts/AuthProvider";
 import Cookies from "js-cookie";
 import axios from "axios";
 
-const NavLayout = ({ children }) => {
+const GuideLayout = ({ children }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [notificationCount, setNotificationCount] = useState(0);
   const [username, setUsername] = useState("");
@@ -42,11 +41,10 @@ const NavLayout = ({ children }) => {
     fetchUnreadCount();
     fetchRecentNotifications();
     
-    // Set up polling for new notifications
     const interval = setInterval(() => {
       fetchUnreadCount();
       fetchRecentNotifications();
-    }, 30000); // Check every 30 seconds
+    }, 30000);
     
     return () => clearInterval(interval);
   }, []);
@@ -93,20 +91,6 @@ const NavLayout = ({ children }) => {
     }
   };
 
-  const markAllAsRead = async () => {
-    try {
-      await axios.patch(
-        `${process.env.REACT_APP_BACKEND_BASEURL}/api/notifications/mark-all-read`,
-        {},
-        { withCredentials: true }
-      );
-      fetchUnreadCount();
-      fetchRecentNotifications();
-    } catch (error) {
-      console.error("Error marking all as read:", error);
-    }
-  };
-
   const handleNotificationClick = (notification) => {
     markAsRead(notification._id);
     if (notification.link) {
@@ -131,6 +115,17 @@ const NavLayout = ({ children }) => {
     navigate("/guide/GuideProfile");
   };
 
+  const getNotificationIcon = (type) => {
+    switch (type) {
+      case "WEEKLY_REPORT_SUBMISSION":
+        return <ClipboardList className="h-4 w-4 text-blue-600" />;
+      case "WEEKLY_REPORT_STATUS_CHANGE":
+        return <Check className="h-4 w-4 text-green-600" />;
+      default:
+        return <AlertCircle className="h-4 w-4 text-yellow-600" />;
+    }
+  };
+
   return (
     <div className="min-h-screen flex flex-col lg:flex-row">
       {/* Mobile Header */}
@@ -143,96 +138,62 @@ const NavLayout = ({ children }) => {
           />
         </div>
         <div className="flex items-center space-x-2">
-          <DropdownMenu
-            open={notificationDropdownOpen}
-            onOpenChange={setNotificationDropdownOpen}
-            trigger={
-              <div className="relative">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="relative"
-                >
-                  <Bell size={20} className="text-gray-600" />
-                  {notificationCount > 0 && (
-                    <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs bg-red-600 text-white">
-                      {notificationCount}
-                    </Badge>
-                  )}
-                </Button>
-              </div>
-            }
-          >
-            <div className="w-80 max-h-96 overflow-y-auto p-2">
-              <div className="flex justify-between items-center p-2 border-b">
-                <h3 className="font-semibold">Notifications</h3>
-                <Button
-                  variant="link"
-                  size="sm"
-                  onClick={markAllAsRead}
-                  disabled={notificationCount === 0}
-                >
-                  Mark all as read
-                </Button>
-              </div>
-              {notifications.length > 0 ? (
-                <div className="divide-y">
-                  {notifications.map((notification) => (
-                    <div
-                      key={notification._id}
-                      className={`p-3 hover:bg-gray-100 cursor-pointer ${
-                        !notification.recipients[0]?.isRead ? "bg-blue-50" : ""
-                      }`}
-                      onClick={() => handleNotificationClick(notification)}
-                    >
-                      <div className="flex items-start space-x-2">
-                        <div className="mt-1">
-                          {notification.type === "WEEKLY_REPORT_SUBMISSION" ? (
-                            <ClipboardList className="h-4 w-4 text-blue-600" />
-                          ) : (
-                            <AlertCircle className="h-4 w-4 text-yellow-600" />
-                          )}
-                        </div>
-                        <div className="flex-1">
-                          <h4 className="font-medium text-sm">
-                            {notification.title}
-                          </h4>
-                          <p className="text-xs text-gray-600">
-                            {notification.message}
-                          </p>
-                          <div className="flex items-center mt-1 text-xs text-gray-500">
-                            <Clock className="h-3 w-3 mr-1" />
-                            {new Date(notification.createdAt).toLocaleString()}
+          <div className="relative">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="relative"
+              onClick={() => setNotificationDropdownOpen(!notificationDropdownOpen)}
+            >
+              <Bell size={20} className="text-gray-600" />
+              {notificationCount > 0 && (
+                <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs bg-red-600 text-white">
+                  {notificationCount}
+                </Badge>
+              )}
+            </Button>
+            {notificationDropdownOpen && (
+              <div className="absolute right-0 mt-2 w-80 bg-white rounded-md shadow-lg z-50 border border-gray-200">
+                <div className="max-h-96 overflow-y-auto">
+                  {notifications.length > 0 ? (
+                    <div className="divide-y">
+                      {notifications.map((notification) => (
+                        <div
+                          key={notification._id}
+                          className={`p-3 hover:bg-gray-100 cursor-pointer ${
+                            !notification.recipients[0]?.isRead ? "bg-blue-50" : ""
+                          }`}
+                          onClick={() => handleNotificationClick(notification)}
+                        >
+                          <div className="flex items-start space-x-2">
+                            <div className="mt-1">
+                              {getNotificationIcon(notification.type)}
+                            </div>
+                            <div className="flex-1">
+                              <h4 className="font-medium text-sm">
+                                {notification.title}
+                              </h4>
+                              <p className="text-xs text-gray-600">
+                                {notification.message}
+                              </p>
+                              <div className="flex items-center mt-1 text-xs text-gray-500">
+                                <Clock className="h-3 w-3 mr-1" />
+                                {new Date(notification.createdAt).toLocaleString()}
+                              </div>
+                            </div>
                           </div>
                         </div>
-                        {!notification.recipients[0]?.isRead && (
-                          <div className="h-2 w-2 rounded-full bg-blue-600 mt-1" />
-                        )}
-                      </div>
+                      ))}
                     </div>
-                  ))}
+                  ) : (
+                    <div className="p-4 text-center text-sm text-gray-500">
+                      No notifications
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div className="p-4 text-center text-sm text-gray-500">
-                  No new notifications
-                </div>
-              )}
-              <div className="p-2 border-t">
-                <Button
-                  variant="link"
-                  size="sm"
-                  className="w-full"
-                  onClick={() => {
-                    setNotificationDropdownOpen(false);
-                    navigate("/guide/GuideNotificationsPage");
-                  }}
-                >
-                  View all notifications
-                  <ChevronRight className="h-4 w-4 ml-1" />
-                </Button>
               </div>
-            </div>
-          </DropdownMenu>
+            )}
+          </div>
           <button
             onClick={() => setIsOpen(!isOpen)}
             className="p-2 focus:outline-none"
@@ -291,28 +252,62 @@ const NavLayout = ({ children }) => {
 
         <div className="p-4">
           <div className="hidden lg:flex justify-between items-center mb-4">
-            <DropdownMenu
-              open={notificationDropdownOpen}
-              onOpenChange={setNotificationDropdownOpen}
-              trigger={
-                <div className="relative">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="relative"
-                  >
-                    <Bell size={20} className="text-gray-600" />
-                    {notificationCount > 0 && (
-                      <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs bg-red-600 text-white">
-                        {notificationCount}
-                      </Badge>
+            <div className="relative">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="relative"
+                onClick={() => setNotificationDropdownOpen(!notificationDropdownOpen)}
+              >
+                <Bell size={20} className="text-gray-600" />
+                {notificationCount > 0 && (
+                  <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs bg-red-600 text-white">
+                    {notificationCount}
+                  </Badge>
+                )}
+              </Button>
+              {notificationDropdownOpen && (
+                <div className="absolute right-0 bottom-full mb-2 w-80 bg-white rounded-md shadow-lg z-50 border border-gray-200">
+                  <div className="max-h-96 overflow-y-auto">
+                    {notifications.length > 0 ? (
+                      <div className="divide-y">
+                        {notifications.map((notification) => (
+                          <div
+                            key={notification._id}
+                            className={`p-3 hover:bg-gray-100 cursor-pointer ${
+                              !notification.recipients[0]?.isRead ? "bg-blue-50" : ""
+                            }`}
+                            onClick={() => handleNotificationClick(notification)}
+                          >
+                            <div className="flex items-start space-x-2">
+                              <div className="mt-1">
+                                {getNotificationIcon(notification.type)}
+                              </div>
+                              <div className="flex-1">
+                                <h4 className="font-medium text-sm">
+                                  {notification.title}
+                                </h4>
+                                <p className="text-xs text-gray-600">
+                                  {notification.message}
+                                </p>
+                                <div className="flex items-center mt-1 text-xs text-gray-500">
+                                  <Clock className="h-3 w-3 mr-1" />
+                                  {new Date(notification.createdAt).toLocaleString()}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="p-4 text-center text-sm text-gray-500">
+                        No notifications
+                      </div>
                     )}
-                  </Button>
+                  </div>
                 </div>
-              }
-            >
-              {/* Same dropdown content as mobile */}
-            </DropdownMenu>
+              )}
+            </div>
           </div>
 
           <DropdownMenu
@@ -352,4 +347,4 @@ const NavLayout = ({ children }) => {
   );
 };
 
-export default NavLayout;
+export default GuideLayout;

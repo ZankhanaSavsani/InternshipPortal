@@ -21,9 +21,11 @@ import {
   TableRow,
 } from "../../ui/table";
 import { Alert, AlertDescription, AlertTitle } from "../../ui/alert";
-import RejectionModal from "../RejectionModal"; // Import the RejectionModal component
+import RejectionModal from "../RejectionModal";
+import { useAuth } from "../../layouts/AuthProvider";
 
 const GuideWeeklyReports = () => {
+  const { user } = useAuth();
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -35,116 +37,63 @@ const GuideWeeklyReports = () => {
   const [statusFilter, setStatusFilter] = useState("");
   const [total, setTotal] = useState(0);
   const [showDeleted, setShowDeleted] = useState(false);
-
-  // State for rejection modal
   const [showRejectionModal, setShowRejectionModal] = useState(false);
   const [rejectionReason, setRejectionReason] = useState("");
   const [currentReportId, setCurrentReportId] = useState(null);
-
-  // State for viewing detailed report info
   const [selectedReport, setSelectedReport] = useState(null);
-
-  // State for error handling
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
-
-  // State specifically for marks modal
   const [showMarksModal, setShowMarksModal] = useState(false);
   const [marks, setMarks] = useState("");
   const [reportForMarks, setReportForMarks] = useState(null);
 
-  // Fetch weekly reports
-  const fetchReports = useCallback(async () => {
-    try {
-      setLoading(true);
-      const params = new URLSearchParams({
-        page,
-        limit: 10,
-        sortBy: sortField,
-        order: sortOrder,
-        includeDeleted: showDeleted,
-      });
-
-      if (studentSearch) {
-        params.append("studentName", studentSearch);
-      }
-
-      if (reportWeek) {
-        params.append("reportWeek", reportWeek);
-      }
-
-      if (statusFilter) {
-        params.append("approvalStatus", statusFilter);
-      }
-
-      const response = await axios.get(
-        `/api/weeklyReport/guide?${params.toString()}`
-      );
-      setReports(response.data.data);
-      setTotalPages(response.data.pages);
-      setTotal(response.data.total);
-    } catch (error) {
-      console.error("Error fetching reports:", error);
-      setError("Failed to load reports. Please try again later.");
-    } finally {
-      setLoading(false);
-    }
-  }, [
-    page,
-    sortField,
-    sortOrder,
-    studentSearch,
-    reportWeek,
-    statusFilter,
-    showDeleted,
-  ]);
-
-  useEffect(() => {
-    fetchReports();
-  }, [fetchReports]);
-
-  // Function to handle adding marks
-  const handleAddMarks = async () => {
-    try {
-      setActionLoading(true);
-      setError(null);
-
-      const marksValue = parseFloat(marks);
-      if (isNaN(marksValue) || marksValue < 0 || marksValue > 10) {
-        setError("Marks must be a number between 0 and 10.");
-        return;
-      }
-
-      await axios.patch(`/api/weeklyReport/guide/${reportForMarks._id}/marks`, {
-        marks: marksValue,
-      });
-
-      // Optimistically update the UI
-      setReports((prevReports) =>
-        prevReports.map((report) =>
-          report._id === reportForMarks._id
-            ? { ...report, marks: marksValue }
-            : report
-        )
-      );
-
-      // Show success message
-      setSuccess("Marks updated successfully.");
-      setShowMarksModal(false); // Close the modal
-      setReportForMarks(null); // Clear the report for marks
-    } catch (error) {
-      console.error("Error updating marks:", error);
-      setError(
-        error.response?.data?.message ||
-          "Failed to update marks. Please try again."
-      );
-    } finally {
-      setActionLoading(false);
+  // Helper function to get status color
+  const getStatusColor = (status) => {
+    switch (status) {
+      case "Approved":
+        return "bg-green-100 text-green-800";
+      case "Rejected":
+        return "bg-red-100 text-red-800";
+      case "Pending":
+        return "bg-yellow-100 text-yellow-800";
+      default:
+        return "bg-gray-100 text-gray-800";
     }
   };
 
-  // Marks Modal Component - completely separate from the Details Modal
+  // Sort icon component
+  const SortIcon = ({ field }) => {
+    if (sortField !== field)
+      return <ChevronDown className="w-4 h-4 text-gray-400" />;
+    return sortOrder === "asc" ? (
+      <ChevronUp className="w-4 h-4" />
+    ) : (
+      <ChevronDown className="w-4 h-4" />
+    );
+  };
+
+  // Handle sort
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortOrder("asc");
+    }
+  };
+
+  // Handle view details
+  const handleViewDetails = (report) => {
+    setSelectedReport(report);
+  };
+
+  // Handle close details modal
+  const handleCloseDetailsModal = () => {
+    setSelectedReport(null);
+  };
+
+  // Marks Modal Component
   const MarksModal = () => {
     if (!reportForMarks) return null;
 
@@ -225,164 +174,6 @@ const GuideWeeklyReports = () => {
           </div>
         </div>
       </div>
-    );
-  };
-
-  // Handle soft delete
-  const handleDeleteReport = async (id) => {
-    try {
-      setActionLoading(true);
-      setError(null);
-
-      await axios.delete(`/api/weeklyReport/guide/${id}`);
-
-      // Optimistically update the UI
-      setReports((prevReports) =>
-        prevReports.map((report) =>
-          report._id === id ? { ...report, isDeleted: true } : report
-        )
-      );
-
-      // Show success message
-      setSuccess("Successfully deleted the weekly report.");
-
-      // Refresh data
-      await fetchReports();
-    } catch (error) {
-      console.error("Error deleting report:", error);
-      setError(
-        error.response?.data?.message ||
-          "Failed to delete report. Please try again."
-      );
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  // Handle restore
-  const handleRestoreReport = async (id) => {
-    try {
-      setActionLoading(true);
-      setError(null);
-
-      await axios.patch(`/api/weeklyReport/guide/${id}/restore`);
-
-      // Optimistically update the UI
-      setReports((prevReports) =>
-        prevReports.map((report) =>
-          report._id === id ? { ...report, isDeleted: false } : report
-        )
-      );
-
-      // Show success message
-      setSuccess("Successfully restored the weekly report.");
-
-      // Refresh data
-      await fetchReports();
-    } catch (error) {
-      console.error("Error restoring report:", error);
-      setError(
-        error.response?.data?.message ||
-          "Failed to restore report. Please try again."
-      );
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  // Handle update approval status
-  const handleUpdateStatus = async (id, status, reason = null) => {
-    try {
-      setActionLoading(true);
-      setError(null);
-
-      const updateData = {
-        approvalStatus: status,
-        comments: reason,
-      };
-      console.log("Updating report with ID:", id);
-
-      const response = await axios.patch(
-        `/api/weeklyReport/guide/${id}/approval`,
-        updateData
-      );
-
-      // Optimistically update the UI
-      setReports((prevReports) =>
-        prevReports.map((report) =>
-          report._id === id
-            ? { ...report, approvalStatus: status, comments: reason }
-            : report
-        )
-      );
-
-      // Show success message
-      setSuccess(`Successfully ${status.toLowerCase()} the weekly report.`);
-
-      // If we're in the details modal, close it
-      if (selectedReport && selectedReport._id === id) {
-        setSelectedReport({
-          ...selectedReport,
-          approvalStatus: status,
-          comments: reason,
-        });
-      }
-
-      // Refresh data
-      await fetchReports();
-    } catch (error) {
-      console.error("Error updating status:", error);
-      setError(
-        error.response?.data?.message ||
-          "Failed to update status. Please try again."
-      );
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  // Handle sort
-  const handleSort = (field) => {
-    if (sortField === field) {
-      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
-    } else {
-      setSortField(field);
-      setSortOrder("asc");
-    }
-  };
-
-  // Handle view details
-  const handleViewDetails = (report) => {
-    setSelectedReport(report);
-  };
-
-  // Handle close details modal
-  const handleCloseDetailsModal = () => {
-    setSelectedReport(null);
-  };
-
-  // Get status color
-  const getStatusColor = (status) => {
-    switch (status) {
-      case "Approved":
-        return "bg-green-100 text-green-800";
-      case "Rejected":
-        return "bg-red-100 text-red-800";
-      case "Pending":
-        return "bg-yellow-100 text-yellow-800";
-      default:
-        return "bg-gray-100 text-gray-800";
-    }
-  };
-
-  // Sort icon component
-  const SortIcon = ({ field }) => {
-    if (sortField !== field)
-      return <ChevronDown className="w-4 h-4 text-gray-400" />;
-    return sortOrder === "asc" ? (
-      <ChevronUp className="w-4 h-4" />
-    ) : (
-      <ChevronDown className="w-4 h-4" />
     );
   };
 
@@ -635,7 +426,6 @@ const GuideWeeklyReports = () => {
 
           {/* Footer */}
           <div className="p-6 border-t border-slate-200 flex flex-wrap items-center justify-end gap-4 bg-slate-50">
-            {/* Close Button */}
             <Button
               onClick={handleCloseDetailsModal}
               className="px-5 py-2.5 text-sm font-medium text-slate-700 bg-white hover:bg-slate-100 focus:ring-4 focus:ring-slate-100 rounded-lg transition-all duration-200 flex items-center shadow-sm border border-slate-300"
@@ -660,6 +450,202 @@ const GuideWeeklyReports = () => {
         </div>
       </div>
     );
+  };
+
+  // Fetch weekly reports for guide's assigned students
+  const fetchReports = useCallback(async () => {
+    try {
+      setLoading(true);
+      const params = new URLSearchParams({
+        page,
+        limit: 10,
+        sortBy: sortField,
+        order: sortOrder,
+        includeDeleted: showDeleted,
+      });
+
+      if (studentSearch) {
+        params.append("studentName", studentSearch);
+      }
+
+      if (reportWeek) {
+        params.append("reportWeek", reportWeek);
+      }
+
+      if (statusFilter) {
+        params.append("approvalStatus", statusFilter);
+      }
+
+      const response = await axios.get(
+        `/api/weeklyReport/guide/reports?${params.toString()}`
+      );
+      setReports(response.data.data);
+      setTotalPages(response.data.pages);
+      setTotal(response.data.total);
+    } catch (error) {
+      console.error("Error fetching reports:", error);
+      setError("Failed to load reports. Please try again later.");
+    } finally {
+      setLoading(false);
+    }
+  }, [
+    page,
+    sortField,
+    sortOrder,
+    studentSearch,
+    reportWeek,
+    statusFilter,
+    showDeleted,
+  ]);
+
+  useEffect(() => {
+    fetchReports();
+  }, [fetchReports]);
+
+  // Handle adding marks
+  const handleAddMarks = async () => {
+    try {
+      setActionLoading(true);
+      setError(null);
+
+      const marksValue = parseFloat(marks);
+      if (isNaN(marksValue) || marksValue < 0 || marksValue > 10) {
+        setError("Marks must be a number between 0 and 10.");
+        return;
+      }
+
+      await axios.patch(`/api/weeklyReport/guide/reports/${reportForMarks._id}/marks`, {
+        marks: marksValue,
+      });
+
+      setReports((prevReports) =>
+        prevReports.map((report) =>
+          report._id === reportForMarks._id
+            ? { ...report, marks: marksValue }
+            : report
+        )
+      );
+
+      setSuccess("Marks updated successfully.");
+      setShowMarksModal(false);
+      setReportForMarks(null);
+    } catch (error) {
+      console.error("Error updating marks:", error);
+      setError(
+        error.response?.data?.message ||
+          "Failed to update marks. Please try again."
+      );
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Handle updating approval status
+  const handleUpdateStatus = async (id, status, reason = null) => {
+    try {
+      setActionLoading(true);
+      setError(null);
+
+      const updateData = {
+        approvalStatus: status,
+        ...(reason && { comments: reason }),
+      };
+
+      const response = await axios.patch(
+        `/api/weeklyReport/guide/reports/${id}/approval`,
+        updateData
+      );
+
+      setReports((prevReports) =>
+        prevReports.map((report) =>
+          report._id === id
+            ? { 
+                ...report, 
+                approvalStatus: status, 
+                comments: reason,
+                ...(status === "Approved" && { 
+                  approvedBy: user._id,
+                  approvalDate: new Date().toISOString()
+                })
+              }
+            : report
+        )
+      );
+
+      setSuccess(`Successfully ${status.toLowerCase()} the weekly report.`);
+      
+      if (selectedReport && selectedReport._id === id) {
+        setSelectedReport({
+          ...selectedReport,
+          approvalStatus: status,
+          comments: reason,
+        });
+      }
+
+      await fetchReports();
+    } catch (error) {
+      console.error("Error updating status:", error);
+      setError(
+        error.response?.data?.message ||
+          "Failed to update status. Please try again."
+      );
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Handle soft delete
+  const handleDeleteReport = async (id) => {
+    try {
+      setActionLoading(true);
+      setError(null);
+
+      await axios.delete(`/api/weeklyReport/guide/reports/${id}`);
+
+      setReports((prevReports) =>
+        prevReports.map((report) =>
+          report._id === id ? { ...report, isDeleted: true } : report
+        )
+      );
+
+      setSuccess("Successfully deleted the weekly report.");
+      await fetchReports();
+    } catch (error) {
+      console.error("Error deleting report:", error);
+      setError(
+        error.response?.data?.message ||
+          "Failed to delete report. Please try again."
+      );
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Handle restore
+  const handleRestoreReport = async (id) => {
+    try {
+      setActionLoading(true);
+      setError(null);
+
+      await axios.patch(`/api/weeklyReport/guide/reports/${id}/restore`);
+
+      setReports((prevReports) =>
+        prevReports.map((report) =>
+          report._id === id ? { ...report, isDeleted: false } : report
+        )
+      );
+
+      setSuccess("Successfully restored the weekly report.");
+      await fetchReports();
+    } catch (error) {
+      console.error("Error restoring report:", error);
+      setError(
+        error.response?.data?.message ||
+          "Failed to restore report. Please try again."
+      );
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   return (
@@ -787,14 +773,14 @@ const GuideWeeklyReports = () => {
                     </div>
                   </TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Marks</TableHead> {/* New Marks Column */}
+                  <TableHead>Marks</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-12">
+                    <TableCell colSpan={6} className="text-center py-12">
                       <div className="flex justify-center items-center">
                         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-600 mr-3"></div>
                         <span className="text-lg font-medium text-gray-700">
@@ -805,7 +791,7 @@ const GuideWeeklyReports = () => {
                   </TableRow>
                 ) : reports.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-12">
+                    <TableCell colSpan={6} className="text-center py-12">
                       <AlertTriangle className="mx-auto h-12 w-12 text-yellow-500 mb-3" />
                       <p className="text-lg font-medium text-gray-700">
                         No reports found
@@ -873,24 +859,19 @@ const GuideWeeklyReports = () => {
                       </TableCell>
                       <TableCell>
                         <div className="flex gap-2">
-                          {/* Add Marks Button */}
                           <Button
                             size="sm"
                             variant="secondary"
                             onClick={() => {
-                              setMarks(report.marks || ""); // Initialize with existing marks if any
-                              setReportForMarks(report); // Use separate state for marks modal
-                              setShowMarksModal(true); // Open the marks modal
+                              setMarks(report.marks || "");
+                              setReportForMarks(report);
+                              setShowMarksModal(true);
                             }}
                             disabled={actionLoading}
                             className="hover:bg-gray-200 transition-colors"
                           >
                             Add Marks
                           </Button>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex gap-2">
                           {report.isDeleted ? (
                             <Button
                               size="sm"
@@ -968,7 +949,6 @@ const GuideWeeklyReports = () => {
                               >
                                 Delete
                               </Button>
-                              {/* {showMarksModal && <MarksModal />} */}
                             </>
                           )}
                         </div>
