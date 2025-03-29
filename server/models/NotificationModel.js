@@ -12,7 +12,7 @@ const notificationSchema = new mongoose.Schema(
       model: {
         type: String,
         required: true,
-        enum: ["admin", "guide", "student"],
+        enum: ["Admin", "Guide", "Student"],
       },
       name: String,
     },
@@ -28,7 +28,7 @@ const notificationSchema = new mongoose.Schema(
         model: {
           type: String,
           required: true,
-          enum: ["admin", "guide", "student"],
+          enum: ["Admin", "Guide", "Student"],
         },
         isRead: {
           type: Boolean,
@@ -56,6 +56,10 @@ const notificationSchema = new mongoose.Schema(
       type: String,
       required: true,
       enum: [
+        "COMPANY_APPROVAL_STATUS_CHANGE",
+        "WEEKLY_REPORT_STATUS_CHANGE",
+        "BROADCAST_MESSAGE",
+        "MARKS_CHANGE",
         "COMPANY_APPROVAL_SUBMISSION",
         "COMPANY_APPROVAL_STATUS_CHANGE",
         "WEEKLY_REPORT_SUBMISSION",
@@ -65,6 +69,14 @@ const notificationSchema = new mongoose.Schema(
         "BROADCAST_MESSAGE",
         "WEEKLY_REPORT_SUBMISSION_GUIDE",
       ],
+    },
+
+    // Additional data specific to marks change
+    marksData: {
+      subject: String,
+      oldMarks: Number,
+      newMarks: Number,
+      remarks: String
     },
 
     // Filters for targeted notifications (used for broadcasting messages to specific year/semester students)

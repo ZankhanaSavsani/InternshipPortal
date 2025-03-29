@@ -12,6 +12,7 @@ import {
   User,
   ChevronDown,
 } from "lucide-react";
+import axios from "axios";
 import {
   DropdownMenu,
   CustomDropdownMenuItem,
@@ -24,7 +25,7 @@ import Cookies from "js-cookie";
 
 const NavLayout = ({ children }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [notificationCount, setNotificationCount] = useState(3);
+  const [notificationCount, setNotificationCount] = useState(0);
   const [username, setUsername] = useState("");
   const navigate = useNavigate();
   const { logout } = useAuth();
@@ -38,10 +39,31 @@ const NavLayout = ({ children }) => {
     }
   }, []);
 
-  // Log username changes for debugging
+  // Function to fetch unread notification count
+  const fetchUnreadCount = async () => {
+    try {
+      const response = await axios.get(
+        `${process.env.REACT_APP_BACKEND_BASEURL}/api/notifications/unread-count`,
+        {
+          withCredentials: true
+        }
+      );
+      if (response.data.success) {
+        setNotificationCount(response.data.unreadCount);
+      } else {
+        console.error("Failed to fetch unread count:", response.data.message);
+      }
+    } catch (error) {
+      console.error("Error fetching unread notification count:", error);
+    }
+  };
+
+  // Fetch unread count on mount & refresh every 30 seconds
   useEffect(() => {
-    console.log("Username updated:", username);
-  }, [username]);
+    fetchUnreadCount();
+    const interval = setInterval(fetchUnreadCount, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const navItems = [
     {
@@ -64,11 +86,6 @@ const NavLayout = ({ children }) => {
       text: "Weekly Reports",
       path: "/student/AddWeeklyReportPage",
     },
-    // {
-    //   icon: <Users size={20} />,
-    //   text: "Mentor Selection",
-    //   path: "/student/mentor",
-    // },
   ];
 
   const handleLogout = async () => {
@@ -92,7 +109,12 @@ const NavLayout = ({ children }) => {
           />
         </div>
         <div className="flex items-center space-x-2">
-          <Button variant="ghost" size="icon" className="relative">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="relative"
+            onClick={() => navigate("/student/StudentNotificationsPage")}
+          >
             <Bell size={20} className="text-gray-600" />
             {notificationCount > 0 && (
               <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs bg-red-600 text-white">
@@ -161,7 +183,12 @@ const NavLayout = ({ children }) => {
         <div className="p-4">
           {/* Desktop Notifications */}
           <div className="hidden lg:flex justify-between items-center mb-4">
-            <Button variant="ghost" size="icon" className="relative">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="relative"
+              onClick={() => navigate("/student/StudentNotificationsPage")}
+            >
               <Bell size={20} className="text-gray-600" />
               {notificationCount > 0 && (
                 <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs bg-red-600 text-white">

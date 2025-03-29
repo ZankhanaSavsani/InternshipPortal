@@ -68,6 +68,360 @@ exports.createWeeklyReport = async (req, res, next) => {
   }
 };
 
+// Enhanced updateApprovalStatus with student notifications
+exports.updateApprovalStatus = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { approvalStatus, comments } = req.body;
+
+    // Validate input
+    if (!approvalStatus || !["Pending", "Approved", "Rejected"].includes(approvalStatus)) {
+      return res.status(400).json({ 
+        success: false,
+        message: "Invalid approval status" 
+      });
+    }
+
+    if (approvalStatus === "Rejected" && !comments) {
+      return res.status(400).json({ 
+        success: false,
+        message: "Comments are required for rejected status" 
+      });
+    }
+
+    // Find and update the report with student population
+    const report = await WeeklyReport.findOneAndUpdate(
+      { _id: id, isDeleted: false },
+      { 
+        approvalStatus,
+        comments: approvalStatus === "Rejected" ? comments : null,
+        statusUpdatedAt: new Date()
+      },
+      { new: true }
+    ).populate('student', 'studentId studentName email');
+
+    if (!report) {
+      return res.status(404).json({ 
+        success: false,
+        message: "Weekly report not found" 
+      });
+    }
+
+    // Send notification to student about status change
+    await sendStatusChangeNotification(
+      report.student._id,
+      report.student.studentName,
+      report.projectTitle,
+      report.reportWeek,
+      approvalStatus,
+      comments,
+      report._id
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Approval status updated successfully",
+      data: report
+    });
+  } catch (error) {
+    logger.error(`[PATCH /api/weekly-reports/${req.params.id}/approval] Error: ${error.message}`);
+    next(error);
+  }
+};
+
+// Enhanced addMarks with student notifications
+exports.addMarks = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { marks } = req.body;
+
+    // Validate input
+    if (marks === undefined || marks < 0 || marks > 10) {
+      return res.status(400).json({ 
+        success: false,
+        message: "Marks must be between 0 and 10" 
+      });
+    }
+
+    // Find and update the report with student population
+    const report = await WeeklyReport.findOneAndUpdate(
+      { _id: id, isDeleted: false },
+      { marks },
+      { new: true }
+    ).populate('student', 'studentId studentName email');
+
+    if (!report) {
+      return res.status(404).json({ 
+        success: false,
+        message: "Weekly report not found" 
+      });
+    }
+
+    // Send notification to student about marks
+    await sendMarksNotification(
+      report.student._id,
+      report.student.studentName,
+      report.projectTitle,
+      report.reportWeek,
+      marks,
+      report._id
+    );
+
+    res.status(200).json({ 
+      success: true,
+      message: "Marks updated successfully",
+      data: report 
+    });
+  } catch (error) {
+    logger.error(`[PATCH /api/weekly-reports/${id}/marks] Error: ${error.message}`);
+    next(error);
+  }
+};
+
+// Enhanced guide-specific approval status update
+exports.updateGuideApprovalStatus = async (req, res, next) => {
+  try {
+    const guideId = req.user._id;
+    const { id } = req.params;
+    const { approvalStatus, comments } = req.body;
+
+    // Validate input
+    if (!approvalStatus || !["Pending", "Approved", "Rejected"].includes(approvalStatus)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid approval status"
+      });
+    }
+
+    if (approvalStatus === "Rejected" && !comments) {
+      return res.status(400).json({
+        success: false,
+        message: "Comments are required for rejected status"
+      });
+    }
+
+    // Verify the report belongs to a student assigned to this guide
+    const internship = await StudentInternship.findOne({
+      guide: guideId,
+      weeklyReports: id,
+      isDeleted: false
+    });
+
+    if (!internship) {
+      return res.status(404).json({
+        success: false,
+        message: "Weekly report not found or not assigned to you"
+      });
+    }
+
+    // Update the report with student population
+    const report = await WeeklyReport.findOneAndUpdate(
+      { _id: id, isDeleted: false },
+      {
+        approvalStatus,
+        comments: approvalStatus === "Rejected" ? comments : null,
+        approvedBy: guideId,
+        approvalDate: new Date()
+      },
+      { new: true }
+    ).populate('student', 'studentId studentName email');
+
+    if (!report) {
+      return res.status(404).json({
+        success: false,
+        message: "Weekly report not found"
+      });
+    }
+
+    // Send notification to student
+    await sendStatusChangeNotification(
+      report.student._id,
+      report.student.studentName,
+      report.projectTitle,
+      report.reportWeek,
+      approvalStatus,
+      comments,
+      report._id
+    );
+
+    logger.info(`[PATCH /api/weeklyReport/guide/${id}/approval] Updated by guide ${guideId}`);
+    res.status(200).json({
+      success: true,
+      data: report
+    });
+  } catch (error) {
+    logger.error(`[PATCH /api/weeklyReport/guide/${id}/approval] Error: ${error.message}`);
+    next(error);
+  }
+};
+
+// Enhanced guide-specific marks update
+exports.addGuideMarks = async (req, res, next) => {
+  try {
+    const guideId = req.user._id;
+    const { id } = req.params;
+    const { marks } = req.body;
+
+    // Validate input
+    if (marks === undefined || marks < 0 || marks > 10) {
+      return res.status(400).json({
+        success: false,
+        message: "Marks must be between 0 and 10"
+      });
+    }
+
+    // Verify the report belongs to a student assigned to this guide
+    const internship = await StudentInternship.findOne({
+      guide: guideId,
+      weeklyReports: id,
+      isDeleted: false
+    });
+
+    if (!internship) {
+      return res.status(404).json({
+        success: false,
+        message: "Weekly report not found or not assigned to you"
+      });
+    }
+
+    // Update the report with student population
+    const report = await WeeklyReport.findOneAndUpdate(
+      { _id: id, isDeleted: false },
+      {
+        marks,
+        markedBy: guideId,
+        markingDate: new Date()
+      },
+      { new: true }
+    ).populate('student', 'studentId studentName email');
+
+    if (!report) {
+      return res.status(404).json({
+        success: false,
+        message: "Weekly report not found"
+      });
+    }
+
+    // Send notification to student
+    await sendMarksNotification(
+      report.student._id,
+      report.student.studentName,
+      report.projectTitle,
+      report.reportWeek,
+      marks,
+      report._id
+    );
+
+    logger.info(`[PATCH /api/weeklyReport/guide/${id}/marks] Updated by guide ${guideId}`);
+    res.status(200).json({
+      success: true,
+      data: report
+    });
+  } catch (error) {
+    logger.error(`[PATCH /api/weeklyReport/guide/${id}/marks] Error: ${error.message}`);
+    next(error);
+  }
+};
+
+// Helper function to send status change notification to student
+const sendStatusChangeNotification = async (
+  studentId,
+  studentName,
+  projectTitle,
+  weekNumber,
+  status,
+  comments,
+  reportId
+) => {
+  try {
+    let title, message, priority = "medium";
+    
+    if (status === "Approved") {
+      title = "Weekly Report Approved";
+      message = `Your weekly report for "${projectTitle}" (Week ${weekNumber}) has been approved.`;
+      priority = "high";
+    } else if (status === "Rejected") {
+      title = "Weekly Report Requires Changes";
+      message = `Your weekly report for "${projectTitle}" (Week ${weekNumber}) needs changes.`;
+      if (comments) message += ` Feedback: ${comments}`;
+      priority = "high";
+    } else {
+      title = "Weekly Report Status Updated";
+      message = `Status updated for your weekly report (${projectTitle}, Week ${weekNumber}).`;
+    }
+
+    await Notification.createNotification({
+      sender: {
+        id: process.env.SYSTEM_ADMIN_ID || '000000000000000000000000',
+        model: "Admin",
+        name: "System Notification"
+      },
+      recipients: [{
+        id: studentId,
+        model: "Student"
+      }],
+      title,
+      message,
+      type: "WEEKLY_REPORT_STATUS_CHANGE",
+      link: `/student/weekly-reports/${reportId}`,
+      priority,
+      relatedEntity: {
+        id: reportId,
+        model: "WeeklyReport"
+      },
+      statusChange: {
+        to: status,
+        ...(comments && { reason: comments })
+      }
+    });
+
+    logger.info(`Notification sent to student ${studentId} about report status change`);
+  } catch (error) {
+    logger.error(`Error sending status change notification: ${error.message}`);
+  }
+};
+
+// Helper function to send marks notification to student
+const sendMarksNotification = async (
+  studentId,
+  studentName,
+  projectTitle,
+  weekNumber,
+  marks,
+  reportId
+) => {
+  try {
+    await Notification.createNotification({
+      sender: {
+        id: process.env.SYSTEM_ADMIN_ID || '000000000000000000000000',
+        model: "Admin",
+        name: "System Notification"
+      },
+      recipients: [{
+        id: studentId,
+        model: "Student"
+      }],
+      title: "Marks Updated",
+      message: `You received ${marks}/10 for your weekly report on "${projectTitle}" (Week ${weekNumber}).`,
+      type: "MARKS_CHANGE",
+      link: `/student/weekly-reports/${reportId}`,
+      priority: "high",
+      relatedEntity: {
+        id: reportId,
+        model: "WeeklyReport"
+      },
+      marksData: {
+        marks,
+        week: weekNumber
+      }
+    });
+
+    logger.info(`Marks notification sent to student ${studentId}`);
+  } catch (error) {
+    logger.error(`Error sending marks notification: ${error.message}`);
+  }
+};
+
 // Helper function to create notification for all admins
 const createAdminNotification = async (studentId, studentName, approval) => {
   try {

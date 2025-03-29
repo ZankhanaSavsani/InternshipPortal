@@ -8,27 +8,137 @@ const {
   deleteCompanyApproval,
   updateApprovalStatus,
   restoreCompanyApproval,
+  sendNotificationToStudents,
+  sendNotificationToAllGuides
 } = require("../controllers/companyApprovalController");
-const validateCompanyApproval = require("../middleware/validateCompanyApproval"); // Import the validation middleware
+const validateCompanyApproval = require("../middleware/validateCompanyApproval");
 const { validateToken, checkRoleAccess } = require("../middleware/authMiddleware");
 
-// Apply validation middleware to POST & PUT routes
-router.post("/", validateToken, checkRoleAccess(["student"]), validateCompanyApproval, createCompanyApproval);
-router.put("/:id", validateToken, checkRoleAccess(["student", "admin"]), validateCompanyApproval, updateCompanyApproval);
+// Student routes ------------------------------------------------------------
 
-// GET all approvals
-router.get("/", validateToken, checkRoleAccess(["admin"]), getAllCompanyApprovals);
+// Create a new company approval (Student only)
+router.post(
+  "/",
+  validateToken,
+  checkRoleAccess(["student"]),
+  validateCompanyApproval,
+  createCompanyApproval
+);
 
-// GET single approval by ID
-router.get("/:id", validateToken, checkRoleAccess(["student", "guide", "admin"]), getCompanyApprovalById);
+// Get own company approvals (Student only)
+router.get(
+  "/student",
+  validateToken,
+  checkRoleAccess(["student"]),
+  async (req, res, next) => {
+    req.query.student = req.user._id; // Force filter by student's own ID
+    next();
+  },
+  getAllCompanyApprovals
+);
 
-// DELETE remove an approval
-router.delete("/:id", validateToken, checkRoleAccess(["student", "admin"]), deleteCompanyApproval);
+// Update own company approval (Student only)
+router.put(
+  "/student/:id",
+  validateToken,
+  checkRoleAccess(["student"]),
+  validateCompanyApproval,
+  updateCompanyApproval
+);
 
-// PATCH route to update approval status
-router.patch("/:id", validateToken, checkRoleAccess(["admin"]), updateApprovalStatus);
+// Delete own company approval (Student only - soft delete)
+router.delete(
+  "/student/:id",
+  validateToken,
+  checkRoleAccess(["student"]),
+  deleteCompanyApproval
+);
 
-// Restore an approval
-router.patch("/:id/restore", validateToken, checkRoleAccess(["student", "admin"]), restoreCompanyApproval);
+// Admin routes --------------------------------------------------------------
+
+// Get all company approvals (Admin only)
+router.get(
+  "/",
+  validateToken,
+  checkRoleAccess(["admin"]),
+  getAllCompanyApprovals
+);
+
+// Get single approval by ID (Admin only)
+router.get(
+  "/admin/:id",
+  validateToken,
+  checkRoleAccess(["admin"]),
+  getCompanyApprovalById
+);
+
+// Update any company approval (Admin only)
+router.put(
+  "/admin/:id",
+  validateToken,
+  checkRoleAccess(["admin"]),
+  validateCompanyApproval,
+  updateCompanyApproval
+);
+
+// Update approval status (Admin only - sends notification to student)
+router.patch(
+  "/admin/:id/status",
+  validateToken,
+  checkRoleAccess(["admin"]),
+  updateApprovalStatus
+);
+
+// Send notification to students by year/semester (Admin only)
+router.post(
+  "/admin/notify/students",
+  validateToken,
+  checkRoleAccess(["admin"]),
+  sendNotificationToStudents
+);
+
+// Send notification to all guides (Admin only)
+router.post(
+  "/admin/notify/guides",
+  validateToken,
+  checkRoleAccess(["admin"]),
+  sendNotificationToAllGuides
+);
+
+// Restore soft-deleted approval (Admin only)
+router.patch(
+  "/admin/:id/restore",
+  validateToken,
+  checkRoleAccess(["admin"]),
+  restoreCompanyApproval
+);
+
+// Guide routes --------------------------------------------------------------
+
+// Get company approvals for assigned students (Guide only)
+router.get(
+  "/guide",
+  validateToken,
+  checkRoleAccess(["guide"]),
+  getAllCompanyApprovals
+);
+
+// Get single approval for assigned student (Guide only)
+router.get(
+  "/guide/:id",
+  validateToken,
+  checkRoleAccess(["guide"]),
+  getCompanyApprovalById
+);
+
+// Shared routes -------------------------------------------------------------
+
+// Get single approval by ID (for owner student or admin/guide with access)
+router.get(
+  "/:id",
+  validateToken,
+  checkRoleAccess(["student", "guide", "admin"]),
+  getCompanyApprovalById
+);
 
 module.exports = router;

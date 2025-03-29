@@ -50,6 +50,7 @@ import LoginPage from "./components/pages/LoginPage";
 
 import { AuthProvider } from "./components/layouts/AuthProvider";
 import ProtectedRoute from "./components/layouts/ProtectedRoute";
+import StudentNotificationsPage from "./components/student/pages/StudentNotificationsPage";
 
 
 
@@ -93,6 +94,11 @@ function App() {
               path="/student/StudentProfile"
               element={<StudentProfile />}
             />
+            <Route
+              path="/student/StudentNotificationsPage"
+              element={<StudentNotificationsPage />}
+            />
+            
           </Route>
         </Route>
 

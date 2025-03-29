@@ -23,7 +23,7 @@ const {
 const router = express.Router();
 
 // Routes
-// Create a new weekly report
+// Create a new weekly report (Student only)
 router.post(
   "/",
   validateToken,
@@ -31,16 +31,19 @@ router.post(
   validateReport,
   createWeeklyReport
 );
-// Get all weekly reports
+
+// Get all weekly reports (Admin only)
 router.get("/", validateToken, checkRoleAccess(["admin"]), getAllWeeklyReports);
-// Get a single weekly report by ID
+
+// Get a single weekly report by ID (Student who owns it or Admin)
 router.get(
   "/:id",
   validateToken,
   checkRoleAccess(["student", "admin"]),
   getWeeklyReportById
 );
-// Update a weekly report
+
+// Update a weekly report (Student who owns it or Admin)
 router.put(
   "/:id",
   validateToken,
@@ -48,28 +51,32 @@ router.put(
   validateReport,
   updateWeeklyReport
 );
-// Delete a weekly report
+
+// Delete a weekly report (Admin only)
 router.delete(
   "/:id",
   validateToken,
   checkRoleAccess(["admin"]),
   deleteWeeklyReport
 );
-// Update approval status and rejection reason
+
+// Update approval status (Admin only - sends notification to student)
 router.patch(
   "/:id/approval",
   validateToken,
   checkRoleAccess(["admin"]),
   updateApprovalStatus
 );
-// Add marks to a weekly report
+
+// Add marks (Admin only - sends notification to student)
 router.patch(
   "/:id/marks",
   validateToken,
   checkRoleAccess(["admin"]),
   addMarks
 );
-// Restore a soft-deleted weekly report
+
+// Restore a soft-deleted weekly report (Admin only)
 router.patch(
   "/:id/restore",
   validateToken,
@@ -77,33 +84,35 @@ router.patch(
   restoreWeeklyReport
 );
 
-// Get all weekly reports for students assigned to the guide
+// Guide-specific routes -----------------------------------------------------
+
+// Get all weekly reports for assigned students (Guide only)
 router.get(
-  "/guide",
+  "/guide/reports",
   validateToken,
   checkRoleAccess(["guide"]),
   getGuideWeeklyReports
 );
 
-// Get a single weekly report for a student assigned to the guide
+// Get a single weekly report for assigned student (Guide only)
 router.get(
-  "/guide/:id",
+  "/guide/reports/:id",
   validateToken,
   checkRoleAccess(["guide"]),
   getGuideWeeklyReportById
 );
 
-// Update approval status for a weekly report
+// Update approval status (Guide only - sends notification to student)
 router.patch(
-  "/guide/:id/approval",
+  "/guide/reports/:id/approval",
   validateToken,
   checkRoleAccess(["guide"]),
   updateGuideApprovalStatus
 );
 
-// Add marks to a weekly report
+// Add marks (Guide only - sends notification to student)
 router.patch(
-  "/guide/:id/marks",
+  "/guide/reports/:id/marks",
   validateToken,
   checkRoleAccess(["guide"]),
   addGuideMarks

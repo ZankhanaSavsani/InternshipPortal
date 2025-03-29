@@ -1,13 +1,15 @@
 const Notification = require("../models/NotificationModel");
 const Student = require("../models/StudentModel");
 const Guide = require("../models/GuideModel");
+const mongoose = require('mongoose');
 
 // Helper function to get user model name
 const getUserModelName = (user) => {
   if (user.constructor.modelName) {
-    return user.constructor.modelName.toLowerCase();
+    return user.constructor.modelName; 
   }
-  return user.role.toLowerCase(); // Fallback to role field if modelName not available
+  // Capitalize the first letter to match model names
+  return user.role.charAt(0).toUpperCase() + user.role.slice(1).toLowerCase();
 };
 
 // Fetch all notifications for a user
@@ -228,7 +230,7 @@ exports.sendNotificationToStudents = async (req, res) => {
 
     const recipients = students.map(student => ({
       id: student._id,
-      model: "student",
+      model: "Student",
     }));
 
     const notification = await Notification.createNotification({
@@ -272,7 +274,7 @@ exports.sendNotificationToAllGuides = async (req, res) => {
 
     const recipients = guides.map(guide => ({
       id: guide._id,
-      model: "guide",
+      model: "Guide",
     }));
 
     const notification = await Notification.createNotification({

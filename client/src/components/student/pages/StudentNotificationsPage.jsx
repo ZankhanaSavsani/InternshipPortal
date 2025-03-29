@@ -9,11 +9,15 @@ import {
   Filter,
   RefreshCw,
   ExternalLink,
-  ChevronDown
+  ChevronDown,
+  Award,
+  FileText,
+  ThumbsUp,
+  ThumbsDown,
 } from 'lucide-react';
 import { useAuth } from '../../layouts/AuthProvider';
 
-const AdminNotificationsPage = () => {
+const StudentNotificationsPage = () => {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -31,7 +35,7 @@ const AdminNotificationsPage = () => {
         withCredentials: true
       });
 
-      console.log('API Response:', response.data); // Debug log
+      console.log('API Response:', response.data);
 
       if (response.data.success) {
         setNotifications(response.data.notifications || []);
@@ -74,7 +78,6 @@ const AdminNotificationsPage = () => {
     if (user.constructor.modelName) {
       return user.constructor.modelName;
     }
-    // Capitalize the first letter to match backend model names
     return user.role.charAt(0).toUpperCase() + user.role.slice(1).toLowerCase();
   };
 
@@ -166,7 +169,8 @@ const AdminNotificationsPage = () => {
     }
   };
 
-  const getNotificationIcon = (type, priority) => {
+  // Enhanced getNotificationIcon with all notification types
+  const getNotificationIcon = (type, priority, notification) => {
     const priorityColors = {
       high: "text-red-500",
       medium: "text-amber-500",
@@ -177,14 +181,19 @@ const AdminNotificationsPage = () => {
 
     switch (type) {
       case "COMPANY_APPROVAL_SUBMISSION":
+        return <FileText className={`${color} h-5 w-5`} />;
       case "COMPANY_APPROVAL_STATUS_CHANGE":
-        return <AlertCircle className={`${color} h-5 w-5`} />;
+        return notification?.statusChange?.to === "Approved" 
+          ? <ThumbsUp className={`${color} h-5 w-5`} />
+          : <ThumbsDown className={`${color} h-5 w-5`} />;
       case "WEEKLY_REPORT_SUBMISSION":
+        return <FileText className={`${color} h-5 w-5`} />;
       case "WEEKLY_REPORT_STATUS_CHANGE":
-        return <Clock className={`${color} h-5 w-5`} />;
-      case "INTERNSHIP_COMPLETION_SUBMISSION":
-      case "INTERNSHIP_STATUS_SUBMISSION":
-        return <CheckCircle className={`${color} h-5 w-5`} />;
+        return notification?.statusChange?.to === "Approved" 
+          ? <ThumbsUp className={`${color} h-5 w-5`} />
+          : <ThumbsDown className={`${color} h-5 w-5`} />;
+      case "MARKS_CHANGE":
+        return <Award className={`${color} h-5 w-5`} />;
       case "BROADCAST_MESSAGE":
         return <Bell className={`${color} h-5 w-5`} />;
       default:
@@ -192,16 +201,120 @@ const AdminNotificationsPage = () => {
     }
   };
 
-  const getNotificationTypeName = (type) => {
+  // Enhanced getNotificationTypeName with all types
+  const getNotificationTypeName = (type, notification) => {
     switch (type) {
-      case "COMPANY_APPROVAL_SUBMISSION": return "Company Approval Request";
-      case "COMPANY_APPROVAL_STATUS_CHANGE": return "Company Approval Update";
+      case "COMPANY_APPROVAL_SUBMISSION": return "Company Approval Submitted";
+      case "COMPANY_APPROVAL_STATUS_CHANGE": 
+        return notification?.statusChange?.to === "Approved" 
+          ? "Company Approval Approved" 
+          : "Company Approval Rejected";
       case "WEEKLY_REPORT_SUBMISSION": return "Weekly Report Submitted";
-      case "WEEKLY_REPORT_STATUS_CHANGE": return "Weekly Report Status";
-      case "INTERNSHIP_COMPLETION_SUBMISSION": return "Internship Completion";
-      case "INTERNSHIP_STATUS_SUBMISSION": return "Internship Status";
+      case "WEEKLY_REPORT_STATUS_CHANGE":
+        return notification?.statusChange?.to === "Approved" 
+          ? "Weekly Report Approved" 
+          : "Weekly Report Rejected";
+      case "MARKS_CHANGE": return "Marks Updated";
       case "BROADCAST_MESSAGE": return "Broadcast Message";
       default: return type.replace(/_/g, ' ').toLowerCase();
+    }
+  };
+
+  // Enhanced notification rendering with all types
+  const renderNotificationContent = (notification) => {
+    const isUnread = isUnreadForUser(notification);
+    
+    switch (notification.type) {
+      case "COMPANY_APPROVAL_STATUS_CHANGE":
+        return (
+          <>
+            <p className={`mt-1 text-sm ${isUnread ? 'text-gray-700' : 'text-gray-500'}`}>
+              {notification.message}
+              {notification.statusChange?.reason && (
+                <div className="mt-2 p-2 bg-gray-100 rounded">
+                  <p className="text-sm font-medium">Reason:</p>
+                  <p className="text-sm">{notification.statusChange.reason}</p>
+                </div>
+              )}
+            </p>
+            <a
+              href={`/student/company-approvals/${notification.relatedEntity?.id}`}
+              className="inline-flex items-center mt-2 text-sm text-blue-600 hover:text-blue-800"
+            >
+              View approval details <ExternalLink className="ml-1 h-3 w-3" />
+            </a>
+          </>
+        );
+
+      case "WEEKLY_REPORT_STATUS_CHANGE":
+        return (
+          <>
+            <p className={`mt-1 text-sm ${isUnread ? 'text-gray-700' : 'text-gray-500'}`}>
+              {notification.message}
+              {notification.statusChange?.reason && (
+                <div className="mt-2 p-2 bg-gray-100 rounded">
+                  <p className="text-sm font-medium">Feedback:</p>
+                  <p className="text-sm">{notification.statusChange.reason}</p>
+                </div>
+              )}
+            </p>
+            <a
+              href={`/student/weekly-reports/${notification.relatedEntity?.id}`}
+              className="inline-flex items-center mt-2 text-sm text-blue-600 hover:text-blue-800"
+            >
+              View report details <ExternalLink className="ml-1 h-3 w-3" />
+            </a>
+          </>
+        );
+
+      case "MARKS_CHANGE":
+        return (
+          <>
+            <p className={`mt-1 text-sm ${isUnread ? 'text-gray-700' : 'text-gray-500'}`}>
+              {notification.message}
+            </p>
+            {notification.marksData && (
+              <div className="mt-2 p-2 bg-gray-100 rounded">
+                <p className="text-sm font-medium">Marks: {notification.marksData.marks}/10</p>
+                {notification.marksData.week && (
+                  <p className="text-sm">For Week {notification.marksData.week}</p>
+                )}
+              </div>
+            )}
+            <a
+              href={`/student/weekly-reports/${notification.relatedEntity?.id}`}
+              className="inline-flex items-center mt-2 text-sm text-blue-600 hover:text-blue-800"
+            >
+              View details <ExternalLink className="ml-1 h-3 w-3" />
+            </a>
+          </>
+        );
+
+      case "BROADCAST_MESSAGE":
+        return (
+          <>
+            <p className={`mt-1 text-sm ${isUnread ? 'text-gray-700' : 'text-gray-500'}`}>
+              {notification.message}
+            </p>
+            {notification.link && (
+              <a
+                href={notification.link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center mt-2 text-sm text-blue-600 hover:text-blue-800"
+              >
+                View details <ExternalLink className="ml-1 h-3 w-3" />
+              </a>
+            )}
+          </>
+        );
+
+      default:
+        return (
+          <p className={`mt-1 text-sm ${isUnread ? 'text-gray-700' : 'text-gray-500'}`}>
+            {notification.message}
+          </p>
+        );
     }
   };
 
@@ -217,12 +330,15 @@ const AdminNotificationsPage = () => {
     return true;
   });
 
+  // Update notificationTypes array to include all types
   const notificationTypes = [
     { value: 'all', label: 'All Notifications' },
-    { value: 'COMPANY_APPROVAL_SUBMISSION', label: 'Company Approval Requests' },
-    { value: 'WEEKLY_REPORT_SUBMISSION', label: 'Weekly Report Submissions' },
-    { value: 'INTERNSHIP_COMPLETION_SUBMISSION', label: 'Internship Completions' },
-    { value: 'INTERNSHIP_STATUS_SUBMISSION', label: 'Internship Status Requests' },
+    { value: 'COMPANY_APPROVAL_SUBMISSION', label: 'Company Submissions' },
+    { value: 'COMPANY_APPROVAL_STATUS_CHANGE', label: 'Company Approvals' },
+    { value: 'WEEKLY_REPORT_SUBMISSION', label: 'Report Submissions' },
+    { value: 'WEEKLY_REPORT_STATUS_CHANGE', label: 'Report Reviews' },
+    { value: 'MARKS_CHANGE', label: 'Marks Updates' },
+    { value: 'BROADCAST_MESSAGE', label: 'Broadcast Messages' },
   ];
 
   const priorityOptions = [
@@ -234,7 +350,6 @@ const AdminNotificationsPage = () => {
 
   const unreadCount = notifications.filter(isUnreadForUser).length;
 
-  // Debug logs
   console.log('All notifications:', notifications);
   console.log('User:', user);
   console.log('Relevant notifications:', relevantNotifications);
@@ -324,7 +439,7 @@ const AdminNotificationsPage = () => {
         </div>
       )}
 
-      {/* Error state - more prominent */}
+      {/* Error state */}
       {error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
           <strong>Error: </strong> {error}
@@ -369,14 +484,14 @@ const AdminNotificationsPage = () => {
                 <div className="p-4">
                   <div className="flex items-start">
                     <div className="flex-shrink-0 pt-0.5">
-                      {getNotificationIcon(notification.type, notification.priority)}
+                      {getNotificationIcon(notification.type, notification.priority, notification)}
                     </div>
 
                     <div className="ml-3 flex-1">
                       <div className="flex justify-between items-start">
                         <div>
                           <p className="text-sm text-gray-500">
-                            {getNotificationTypeName(notification.type)}
+                            {getNotificationTypeName(notification.type, notification)}
                           </p>
                           <h3 className={`font-medium ${isUnread ? 'text-gray-900' : 'text-gray-600'}`}>
                             {notification.title}
@@ -395,28 +510,7 @@ const AdminNotificationsPage = () => {
                         )}
                       </div>
 
-                      <p className={`mt-1 text-sm ${isUnread ? 'text-gray-700' : 'text-gray-500'}`}>
-                        {notification.message}
-                      </p>
-
-                      {notification.link && (
-                        <a
-                          href={notification.link}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center mt-2 text-sm text-blue-600 hover:text-blue-800"
-                        >
-                          View details <ExternalLink className="ml-1 h-3 w-3" />
-                        </a>
-                      )}
-
-                      {notification.targetFilters && (notification.targetFilters.year || notification.targetFilters.semester) && (
-                        <div className="mt-2 text-xs text-gray-500">
-                          Target:
-                          {notification.targetFilters.year && ` Year ${notification.targetFilters.year}`}
-                          {notification.targetFilters.semester && ` Semester ${notification.targetFilters.semester}`}
-                        </div>
-                      )}
+                      {renderNotificationContent(notification)}
 
                       <div className="mt-2 flex items-center text-xs text-gray-500">
                         <p>
@@ -451,4 +545,4 @@ const AdminNotificationsPage = () => {
   );
 };
 
-export default AdminNotificationsPage;
+export default StudentNotificationsPage;

@@ -3,7 +3,7 @@ const CompanyApprovalDetails = require("../models/CompanyApprovalFormModel");
 const StudentInternship = require("../models/StudentInternshipModel");
 const Admins = require("../models/AdminModel");
 const Notification = require("../models/NotificationModel");
-// const StudentModel = require("../models/StudentModel");
+const Student = require("../models/StudentModel");
 
 
 // @desc   Get a single company approval by ID (excluding soft-deleted records)
@@ -252,51 +252,256 @@ exports.deleteCompanyApproval = async (req, res, next) => {
   }
 };
 
-// Update approval status and rejection reason
+// Update approval status and rejection reason with notifications
 exports.updateApprovalStatus = async (req, res) => {
-  const { id } = req.params; // Company approval ID
-  const { approvalStatus, rejectionReason } = req.body;
+  const { id } = req.params;
+  const { approvalStatus, rejectionReason, adminRemarks } = req.body;
 
   try {
     // Validate input
-    if (
-      !approvalStatus ||
-      !["Pending", "Approved", "Rejected"].includes(approvalStatus)
-    ) {
-      return res.status(400).json({ message: "Invalid approval status" });
+    if (!approvalStatus || !["Pending", "Approved", "Rejected"].includes(approvalStatus)) {
+      return res.status(400).json({ 
+        success: false,
+        message: "Invalid approval status" 
+      });
     }
 
     if (approvalStatus === "Rejected" && !rejectionReason) {
-      return res
-        .status(400)
-        .json({ message: "Rejection reason is required for rejected status" });
+      return res.status(400).json({ 
+        success: false,
+        message: "Rejection reason is required for rejected status" 
+      });
     }
 
-    // Find the company approval by ID
-    const companyApproval = await CompanyApprovalDetails.findById(id);
+    // Find and update the approval
+    const companyApproval = await CompanyApprovalDetails.findOneAndUpdate(
+      { _id: id, isDeleted: false },
+      { 
+        approvalStatus,
+        rejectionReason: approvalStatus === "Rejected" ? rejectionReason : null,
+        adminRemarks: adminRemarks || undefined,
+        statusUpdatedAt: new Date()
+      },
+      { new: true, runValidators: true }
+    ).populate('student', 'studentId studentName email');
 
     if (!companyApproval) {
-      return res.status(404).json({ message: "Company approval not found" });
+      return res.status(404).json({ 
+        success: false,
+        message: "Approval record not found" 
+      });
     }
 
-    // Update the approval status and rejection reason
-    companyApproval.approvalStatus = approvalStatus;
-    companyApproval.rejectionReason =
-      approvalStatus === "Rejected" ? rejectionReason : null;
+    // Send notification to student about status change
+    await sendStatusChangeNotification(
+      companyApproval.student._id,
+      companyApproval.student.studentName,
+      companyApproval.companyName,
+      approvalStatus,
+      rejectionReason,
+      companyApproval._id
+    );
 
-    // Save the updated document
-    await companyApproval.save();
-
-    // Return success response
     res.status(200).json({
+      success: true,
       message: "Approval status updated successfully",
-      data: companyApproval,
+      data: companyApproval
     });
+
   } catch (error) {
-    console.error("Error updating approval status:", error);
-    res.status(500).json({ message: "Internal server error" });
+    logger.error(`[PUT /api/company-approvals/${id}/status] Error: ${error.message}`);
+    res.status(500).json({ 
+      success: false,
+      message: "Internal server error" 
+    });
   }
 };
+
+// Helper function to send status change notification
+const sendStatusChangeNotification = async (studentId, studentName, companyName, status, reason, approvalId) => {
+  try {
+    let title, message, priority = "medium";
+    
+    if (status === "Approved") {
+      title = "Company Approval Approved";
+      message = `Your approval request for ${companyName} has been approved.`;
+      priority = "high";
+    } else if (status === "Rejected") {
+      title = "Company Approval Rejected";
+      message = `Your approval request for ${companyName} has been rejected.`;
+      if (reason) message += ` Reason: ${reason}`;
+      priority = "high";
+    } else {
+      title = "Company Approval Status Update";
+      message = `Status updated for your approval request (${companyName}).`;
+    }
+
+    await Notification.createNotification({
+      sender: {
+        id: process.env.SYSTEM_ADMIN_ID || '000000000000000000000000', // Default system ID
+        model: "Admin",
+        name: "System Notification"
+      },
+      recipients: [{
+        id: studentId,
+        model: "Student"
+      }],
+      title,
+      message,
+      type: "COMPANY_APPROVAL_STATUS_CHANGE",
+      link: `/student/company-approvals/${approvalId}`,
+      priority,
+      relatedEntity: {
+        id: approvalId,
+        model: "CompanyApproval"
+      },
+      statusChange: {
+        to: status,
+        ...(reason && { reason })
+      }
+    });
+
+    logger.info(`Notification sent to student ${studentId} about approval status change`);
+  } catch (error) {
+    logger.error(`Error sending status change notification: ${error.message}`);
+  }
+};
+
+// Enhanced create company approval with notification
+// exports.createCompanyApproval = async (req, res, next) => {
+//   try {
+//     const studentId = req.user.id;
+//     const { studentName } = req.body;
+    
+//     if (!studentId || !studentName) {
+//       logger.error("[POST /api/company-approvals] Invalid user data");
+//       return res.status(400).json({ 
+//         success: false, 
+//         message: "Student information required" 
+//       });
+//     }
+    
+//     // Verify student exists
+//     const student = await Student.findById(studentId);
+//     if (!student) {
+//       return res.status(404).json({ 
+//         success: false,
+//         message: "Student not found" 
+//       });
+//     }
+
+//     const approvalData = {
+//       ...req.body,
+//       student: studentId,
+//       studentName: student.studentName || studentName
+//     };
+    
+//     const newApproval = await CompanyApprovalDetails.create(approvalData);
+    
+//     // Update student internship record
+//     await StudentInternship.findOneAndUpdate(
+//       { student: studentId },
+//       { $push: { companyApprovalDetails: newApproval._id } },
+//       { upsert: true, new: true }
+//     );
+    
+//     // Notify admins
+//     await createAdminNotification(
+//       studentId,
+//       student.studentName || studentName,
+//       newApproval
+//     );
+    
+//     res.status(201).json({ 
+//       success: true, 
+//       data: newApproval 
+//     });
+//   } catch (error) {
+//     logger.error(`[POST /api/company-approvals] Error: ${error.message}`);
+//     next(error);
+//   }
+// };
+
+// Enhanced admin notification helper
+// const createAdminNotification = async (studentId, studentName, approval) => {
+//   try {
+//     const recipients = await Admins.find({})
+//       .select('_id')
+//       .then(admins => admins.map(admin => ({
+//         id: admin._id,
+//         model: "Admin"
+//       })));
+
+//     if (recipients.length > 0) {
+//       await Notification.createNotification({
+//         sender: {
+//           id: studentId,
+//           model: "Student",
+//           name: studentName
+//         },
+//         recipients,
+//         title: "New Company Approval Request",
+//         message: `${studentName} submitted approval for ${approval.companyName}`,
+//         type: "COMPANY_APPROVAL_SUBMISSION",
+//         link: `/admin/company-approvals/${approval._id}`,
+//         priority: "medium",
+//         relatedEntity: {
+//           id: approval._id,
+//           model: "CompanyApproval"
+//         }
+//       });
+//     }
+//   } catch (error) {
+//     logger.error(`Admin notification failed: ${error.message}`);
+//   }
+// };
+
+
+// Update approval status and rejection reason
+// exports.updateApprovalStatus = async (req, res) => {
+//   const { id } = req.params; // Company approval ID
+//   const { approvalStatus, rejectionReason,  adminRemarks } = req.body;
+
+//   try {
+//     // Validate input
+//     if (
+//       !approvalStatus ||
+//       !["Pending", "Approved", "Rejected"].includes(approvalStatus)
+//     ) {
+//       return res.status(400).json({ message: "Invalid approval status" });
+//     }
+
+//     if (approvalStatus === "Rejected" && !rejectionReason) {
+//       return res
+//         .status(400)
+//         .json({ message: "Rejection reason is required for rejected status" });
+//     }
+
+//     // Find the company approval by ID
+//     const companyApproval = await CompanyApprovalDetails.findById(id);
+
+//     if (!companyApproval) {
+//       return res.status(404).json({ message: "Company approval not found" });
+//     }
+
+//     // Update the approval status and rejection reason
+//     companyApproval.approvalStatus = approvalStatus;
+//     companyApproval.rejectionReason =
+//       approvalStatus === "Rejected" ? rejectionReason : null;
+
+//     // Save the updated document
+//     await companyApproval.save();
+
+//     // Return success response
+//     res.status(200).json({
+//       message: "Approval status updated successfully",
+//       data: companyApproval,
+//     });
+//   } catch (error) {
+//     console.error("Error updating approval status:", error);
+//     res.status(500).json({ message: "Internal server error" });
+//   }
+// };
 
 // @desc   Restore a soft-deleted company approval
 // @route  PATCH /api/company-approvals/:id/restore
@@ -339,5 +544,98 @@ exports.restoreCompanyApproval = async (req, res, next) => {
       `[PATCH /api/company-approvals/${req.params.id}/restore] Error: ${error.message}`
     );
     next(error);
+  }
+};
+
+// Add to companyApprovalController.js
+
+// @desc   Send notification to students by year/semester
+// @route  POST /api/company-approvals/admin/notify/students
+exports.sendNotificationToStudents = async (req, res) => {
+  try {
+    const { title, message, year, semester, priority = 'medium', link } = req.body;
+    const sender = {
+      id: req.user._id,
+      model: "Admin",
+      name: req.user.name || "System Admin",
+    };
+
+    const students = await Student.find({ year, semester }).select("_id");
+    
+    if (!students.length) {
+      return res.status(400).json({
+        success: false,
+        message: "No students found for the specified year and semester",
+      });
+    }
+
+    const recipients = students.map(student => ({
+      id: student._id,
+      model: "Student",
+    }));
+
+    const notification = await Notification.createNotification({
+      sender,
+      recipients,
+      title,
+      message,
+      type: "BROADCAST_MESSAGE",
+      targetFilters: { year, semester },
+      link,
+      priority,
+    });
+
+    res.status(201).json({ success: true, notification });
+  } catch (error) {
+    logger.error("Error sending notification to students:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// @desc   Send notification to all guides
+// @route  POST /api/company-approvals/admin/notify/guides
+exports.sendNotificationToAllGuides = async (req, res) => {
+  try {
+    const { title, message, priority = 'medium', link } = req.body;
+    const sender = {
+      id: req.user._id,
+      model: "Admin",
+      name: req.user.name || "System Admin",
+    };
+
+    const guides = await Guide.find().select("_id");
+    
+    if (!guides.length) {
+      return res.status(400).json({
+        success: false,
+        message: "No guides found",
+      });
+    }
+
+    const recipients = guides.map(guide => ({
+      id: guide._id,
+      model: "Guide",
+    }));
+
+    const notification = await Notification.createNotification({
+      sender,
+      recipients,
+      title,
+      message,
+      type: "BROADCAST_MESSAGE",
+      link,
+      priority,
+    });
+
+    res.status(201).json({ success: true, notification });
+  } catch (error) {
+    logger.error("Error sending notification to guides:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 };
