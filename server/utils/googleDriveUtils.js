@@ -2,7 +2,7 @@ const { google } = require("googleapis");
 const fs = require("fs");
 
 const auth = new google.auth.GoogleAuth({
-  keyFile: "E:/Internship_Management_System/server/apikey.json", // Path to your Service Account JSON key file
+  keyFile: "D:\\Internship_Portal-main\\server\\apikey.json", // Path to your Service Account JSON key file
   scopes: ["https://www.googleapis.com/auth/drive"],
 });
 

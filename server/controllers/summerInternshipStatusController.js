@@ -8,6 +8,8 @@ const {
 const mongoose = require("mongoose");
 const objectId = new mongoose.Types.ObjectId(); 
 const StudentInternship = require("../models/StudentInternshipModel");
+const Admins = require("../models/AdminModel");
+const Notification = require("../models/NotificationModel");
 
 // @desc   Get all internship statuses (including soft-deleted ones if requested)
 // @route  GET /api/summer-internships
@@ -173,6 +175,10 @@ exports.createInternshipStatus = async (req, res, next) => {
     // Save the updated StudentInternship document
     await studentInternship.save();
 
+    // Create notification for all admins
+    await createAdminNotification(student, studentName, newStatus);
+    
+
     logger.info(
       `[POST /api/summer-internship-status] Created ID: ${newStatus._id}`
     );
@@ -187,6 +193,45 @@ exports.createInternshipStatus = async (req, res, next) => {
       await deleteLocalFile(req.file.path);
     }
     next(error);
+  }
+};
+
+// Helper function to create notification for all admins
+const createAdminNotification = async (studentId, studentName, approval) => {
+  try {
+    // Get all admin users from the database
+    const allAdmins = await Admins.find({});
+    
+    if (!allAdmins || allAdmins.length === 0) {
+      logger.warn("[Notification] No admin users found to notify");
+      return;
+    }
+    
+    // Format recipients array for notification
+    const recipients = allAdmins.map(admin => ({
+      id: admin._id,
+      model: "admin"
+    }));
+    
+    // Create notification
+    await Notification.createNotification({
+      sender: {
+        id: studentId,
+        model: "student",
+        name: studentName
+      },
+      recipients,
+      title: "New Internship Status Submission",
+      message: `${studentName} has submitted a Internship Status Submission}.`,
+      type: "INTERNSHIP_STATUS_SUBMISSION",
+      // link: `/admin/company-approvals/${approval._id}`, // Link to view the approval details
+      priority: "medium"
+    });
+    
+    logger.info(`[Notification] Sent company approval notification to ${allAdmins.length} admin(s)`);
+  } catch (error) {
+    logger.error(`[Notification] Error creating admin notification: ${error.message}`);
+    // Don't throw the error as this is a secondary operation
   }
 };
 

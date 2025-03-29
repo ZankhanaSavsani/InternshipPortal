@@ -172,8 +172,9 @@ const SummerInternshipStatusForm = () => {
         const validtypeOfInternship = [
           "Development Project",
           "Inhouse/Research Project",
-          "On technologies Training",
+          "On Technology Training",
         ];
+        
         if (
           !formData.typeOfInternship ||
           !validtypeOfInternship.includes(formData.typeOfInternship)
@@ -651,10 +652,10 @@ const SummerInternshipStatusForm = () => {
                   Inhouse/Research Project
                 </SelectItem>
                 <SelectItem
-                  value="On technologies Training"
+                  value="On Technology Training"
                   className="text-gray-200 hover:bg-gray-700 focus:bg-gray-700 focus:text-white"
                 >
-                  On technologies Training
+                  On Technology Training
                 </SelectItem>
               </SelectContent>
             </Select>

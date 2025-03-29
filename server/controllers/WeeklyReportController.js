@@ -2,53 +2,99 @@ const WeeklyReport = require("../models/WeeklyProgressReportModel");
 const logger = require("../utils/logger");
 const mongoose = require("mongoose");
 const StudentInternship = require("../models/StudentInternshipModel");
+const Admins = require("../models/AdminModel");
+const Guide = require("../models/GuideModel");
+const Notification = require("../models/NotificationModel");
 
 
 // @desc   Create a new weekly report
 // @route  POST /api/weekly-reports
 exports.createWeeklyReport = async (req, res, next) => {
-    try {
-      const student = req.user._id;
-      const studentName = req.user.studentName;
-  
-      if (!student || !studentName) {
-        logger.error("[POST /api/weeklyReport] Invalid user!!");
-        return res.status(400).json({ success: false, message: "Invalid user!!" });
-      }
-  
-      // Add student and studentName to the request body
-      const reportData = {
-        ...req.body,
-        student: student, // Use _id as the student reference
-        studentName: studentName, // Use the student's name from the user data
-      };
-  
-      // Create the new approval
-      const newReport = await WeeklyReport.create(reportData);
-      
-      // Find the corresponding StudentInternship document
-          const studentInternship = await StudentInternship.findOne({ student });
-      
-          if (!studentInternship) {
-            return res.status(404).json({
-              success: false,
-              message: "Student internship record not found.",
-            });
-          }
-      
-          // Push the new weekly Report ObjectId into the weeklyReports array
-          studentInternship.weeklyReports.push(newReport._id);
-      
-          // Save the updated StudentInternship document
-          await studentInternship.save();
+  try {
+    const student = req.user._id;
+    const studentName = req.user.studentName;
 
-      logger.info(`[POST /api/weeklyReport] Created ID: ${newReport._id}`);
-  
-      res.status(201).json({ success: true, data: newReport });
-    } catch (error) {
-      logger.error(`[POST /api/weeklyReport] Error: ${error.message}`);
-      next(error);
+    if (!student || !studentName) {
+      logger.error("[POST /api/weeklyReport] Invalid user!!");
+      return res.status(400).json({ success: false, message: "Invalid user!!" });
     }
+
+    // Add student and studentName to the request body
+    const reportData = {
+      ...req.body,
+      student: student, // Use _id as the student reference
+      studentName: studentName, // Use the student's name from the user data
+    };
+
+    // Create the new approval
+    const newReport = await WeeklyReport.create(reportData);
+
+    // Find the corresponding StudentInternship document
+    const studentInternship = await StudentInternship.findOne({ student });
+
+    if (!studentInternship) {
+      return res.status(404).json({
+        success: false,
+        message: "Student internship record not found.",
+      });
+    }
+
+    // Push the new weekly Report ObjectId into the weeklyReports array
+    studentInternship.weeklyReports.push(newReport._id);
+
+    // Save the updated StudentInternship document
+    await studentInternship.save();
+
+    // Create notification for all admins
+    await createAdminNotification(student, studentName, newReport);
+
+
+    logger.info(`[POST /api/weeklyReport] Created ID: ${newReport._id}`);
+
+    res.status(201).json({ success: true, data: newReport });
+  } catch (error) {
+    logger.error(`[POST /api/weeklyReport] Error: ${error.message}`);
+    next(error);
+  }
+};
+
+// Helper function to create notification for all admins
+const createAdminNotification = async (studentId, studentName, approval) => {
+  try {
+    // Get all admin users from the database
+    const allAdmins = await Admins.find({});
+    
+    if (!allAdmins || allAdmins.length === 0) {
+      logger.warn("[Notification] No admin users found to notify");
+      return;
+    }
+    
+    // Format recipients array for notification
+    const recipients = allAdmins.map(admin => ({
+      id: admin._id,
+      model: "admin"
+    }));
+    
+    // Create notification
+    await Notification.createNotification({
+      sender: {
+        id: studentId,
+        model: "student",
+        name: studentName
+      },
+      recipients,
+      title: "New Weekly Report Submisson ",
+      message: `${studentName} has submitted a Weekly Report }.`,
+      type: "WEEKLY_REPORT_SUBMISSION",
+      // link: `/admin/company-approvals/${approval._id}`, // Link to view the approval details
+      priority: "medium"
+    });
+    
+    logger.info(`[Notification] Sent company approval notification to ${allAdmins.length} admin(s)`);
+  } catch (error) {
+    logger.error(`[Notification] Error creating admin notification: ${error.message}`);
+    // Don't throw the error as this is a secondary operation
+  }
 };
 
 // @desc   Get all weekly reports (including soft-deleted ones if requested)
@@ -288,16 +334,16 @@ exports.getGuideWeeklyReports = async (req, res, next) => {
     const limit = parseInt(req.query.limit) || 10;
 
     if (page < 1 || limit < 1) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        message: "Invalid pagination parameters" 
+        message: "Invalid pagination parameters"
       });
     }
 
     const skip = (page - 1) * limit;
 
     // Get all student internships assigned to this guide
-    const internships = await StudentInternship.find({ 
+    const internships = await StudentInternship.find({
       guide: guideId,
       isDeleted: false
     }).select('student weeklyReports');
@@ -362,9 +408,9 @@ exports.getGuideWeeklyReportById = async (req, res, next) => {
     });
 
     if (!internship) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        message: "Weekly report not found or not assigned to you" 
+        message: "Weekly report not found or not assigned to you"
       });
     }
 
@@ -375,15 +421,15 @@ exports.getGuideWeeklyReportById = async (req, res, next) => {
     }).populate("student", "name email studentId");
 
     if (!report) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        message: "Weekly report not found" 
+        message: "Weekly report not found"
       });
     }
 
-    res.status(200).json({ 
+    res.status(200).json({
       success: true,
-      data: report 
+      data: report
     });
   } catch (error) {
     logger.error(`[GET /api/weeklyReport/guide/${req.params.id}] Error: ${error.message}`);
@@ -401,16 +447,16 @@ exports.updateGuideApprovalStatus = async (req, res, next) => {
 
     // Validate input
     if (!approvalStatus || !["Pending", "Approved", "Rejected"].includes(approvalStatus)) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        message: "Invalid approval status" 
+        message: "Invalid approval status"
       });
     }
 
     if (approvalStatus === "Rejected" && !comments) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        message: "Comments are required for rejected status" 
+        message: "Comments are required for rejected status"
       });
     }
 
@@ -422,16 +468,16 @@ exports.updateGuideApprovalStatus = async (req, res, next) => {
     });
 
     if (!internship) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        message: "Weekly report not found or not assigned to you" 
+        message: "Weekly report not found or not assigned to you"
       });
     }
 
     // Update the report
     const report = await WeeklyReport.findOneAndUpdate(
       { _id: id, isDeleted: false },
-      { 
+      {
         approvalStatus,
         comments: approvalStatus === "Rejected" ? comments : null,
         approvedBy: guideId,
@@ -441,16 +487,16 @@ exports.updateGuideApprovalStatus = async (req, res, next) => {
     );
 
     if (!report) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        message: "Weekly report not found" 
+        message: "Weekly report not found"
       });
     }
 
     logger.info(`[PATCH /api/weeklyReport/guide/${id}/approval] Updated by guide ${guideId}`);
-    res.status(200).json({ 
+    res.status(200).json({
       success: true,
-      data: report 
+      data: report
     });
   } catch (error) {
     logger.error(`[PATCH /api/weeklyReport/guide/${id}/approval] Error: ${error.message}`);
@@ -468,9 +514,9 @@ exports.addGuideMarks = async (req, res, next) => {
 
     // Validate input
     if (marks === undefined || marks < 0 || marks > 10) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        message: "Marks must be between 0 and 10" 
+        message: "Marks must be between 0 and 10"
       });
     }
 
@@ -482,16 +528,16 @@ exports.addGuideMarks = async (req, res, next) => {
     });
 
     if (!internship) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        message: "Weekly report not found or not assigned to you" 
+        message: "Weekly report not found or not assigned to you"
       });
     }
 
     // Update the marks
     const report = await WeeklyReport.findOneAndUpdate(
       { _id: id, isDeleted: false },
-      { 
+      {
         marks,
         markedBy: guideId,
         markingDate: new Date()
@@ -500,16 +546,16 @@ exports.addGuideMarks = async (req, res, next) => {
     );
 
     if (!report) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        message: "Weekly report not found" 
+        message: "Weekly report not found"
       });
     }
 
     logger.info(`[PATCH /api/weeklyReport/guide/${id}/marks] Updated by guide ${guideId}`);
-    res.status(200).json({ 
+    res.status(200).json({
       success: true,
-      data: report 
+      data: report
     });
   } catch (error) {
     logger.error(`[PATCH /api/weeklyReport/guide/${id}/marks] Error: ${error.message}`);

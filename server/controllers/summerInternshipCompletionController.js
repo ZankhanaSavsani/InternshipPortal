@@ -7,6 +7,8 @@ const {
 const SummerInternshipCompletionStatus = require("../models/SummerInternshipCompletionFormModel");
 const mongoose = require("mongoose");
 const StudentInternship = require("../models/StudentInternshipModel");
+const Notification = require("../models/NotificationModel");
+const Admins = require("../models/AdminModel");
 
 // @desc   Get all internship completion statuses (including soft-deleted ones if requested)
 // @route  GET /api/summer-internships-completion
@@ -213,12 +215,15 @@ exports.createInternshipCompletionStatus = async (req, res, next) => {
       });
     }
 
-    // Push the new internship completion status ObjectId into the summerInternshipCompletionStatus array
+    // Push the new internship status ObjectId into the summerInternshipStatus array
     studentInternship.summerInternshipCompletionStatus.push(newStatus._id);
-
+    
     // Save the updated StudentInternship document
     await studentInternship.save();
-
+    
+    // Create notification for all admins
+    await createAdminNotification(student, studentName, newStatus);
+    
     // Log success
     logger.info(
       `[POST /api/summer-internships-completion] Created ID: ${newStatus._id}`
@@ -241,6 +246,45 @@ exports.createInternshipCompletionStatus = async (req, res, next) => {
       });
     }
     next(error);
+  }
+};
+
+// Helper function to create notification for all admins
+const createAdminNotification = async (studentId, studentName, approval) => {
+  try {
+    // Get all admin users from the database
+    const allAdmins = await Admins.find({});
+    
+    if (!allAdmins || allAdmins.length === 0) {
+      logger.warn("[Notification] No admin users found to notify");
+      return;
+    }
+    
+    // Format recipients array for notification
+    const recipients = allAdmins.map(admin => ({
+      id: admin._id,
+      model: "admin"
+    }));
+    
+    // Create notification
+    await Notification.createNotification({
+      sender: {
+        id: studentId,
+        model: "student",
+        name: studentName
+      },
+      recipients,
+      title: "New Internship Completion Submission ",
+      message: `${studentName} has submitted a Internship Completion Submission}.`,
+      type: "INTERNSHIP_COMPLETION_SUBMISSION",
+      // link: `/admin/company-approvals/${approval._id}`, // Link to view the approval details
+      priority: "medium"
+    });
+    
+    logger.info(`[Notification] Sent company approval notification to ${allAdmins.length} admin(s)`);
+  } catch (error) {
+    logger.error(`[Notification] Error creating admin notification: ${error.message}`);
+    // Don't throw the error as this is a secondary operation
   }
 };
 
