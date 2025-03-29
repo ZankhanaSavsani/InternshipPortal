@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const {
   fetchNotifications,
+  getRecentNotifications,
   createNotification,
   markAllAsRead,
   markAsRead,
@@ -14,7 +15,7 @@ const {
   checkRoleAccess,
 } = require("../middleware/authMiddleware");
 
-// Fetch notifications for the authenticated user
+// Fetch all notifications for the authenticated user
 router.get(
   "/",
   validateToken,
@@ -22,14 +23,35 @@ router.get(
   fetchNotifications
 );
 
+// Get recent notifications (last 5)
+router.get(
+  "/recent",
+  validateToken,
+  checkRoleAccess(["admin", "guide", "student"]),
+  getRecentNotifications
+);
+
 // Create a notification (admin only)
-router.post("/", validateToken, checkRoleAccess(["admin"]), createNotification);
+router.post(
+  "/",
+  validateToken,
+  checkRoleAccess(["admin"]),
+  createNotification
+);
 
 // Mark all notifications as read for the authenticated user
 router.put(
   "/mark-all-read",
   validateToken,
   checkRoleAccess(["admin", "guide", "student"]),
+  markAllAsRead
+);
+
+// Mark all notifications as read for a guide
+router.put(
+  "/mark-all-read/guide",
+  validateToken,
+  checkRoleAccess(["guide"]),
   markAllAsRead
 );
 
@@ -41,6 +63,15 @@ router.put(
   markAsRead
 );
 
+// Mark a specific notification as read for a guide
+router.put(
+  "/:notificationId/mark-read/guide",
+  validateToken,
+  checkRoleAccess(["guide"]),
+  markAsRead
+);
+
+// Get unread notification count
 router.get(
   "/unread-count",
   validateToken,

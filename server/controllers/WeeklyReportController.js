@@ -48,6 +48,16 @@ exports.createWeeklyReport = async (req, res, next) => {
     // Create notification for all admins
     await createAdminNotification(student, studentName, newReport);
 
+    // Notify the guide if one is assigned
+    if (studentInternship.guide) {
+      await createGuideNotification(
+        student, 
+        studentName, 
+        newReport, 
+        studentInternship.guide
+      );
+    }
+
 
     logger.info(`[POST /api/weeklyReport] Created ID: ${newReport._id}`);
 
@@ -93,6 +103,34 @@ const createAdminNotification = async (studentId, studentName, approval) => {
     logger.info(`[Notification] Sent company approval notification to ${allAdmins.length} admin(s)`);
   } catch (error) {
     logger.error(`[Notification] Error creating admin notification: ${error.message}`);
+    // Don't throw the error as this is a secondary operation
+  }
+};
+
+// Helper function to create notification for the assigned guide
+const createGuideNotification = async (studentId, studentName, report, guide) => {
+  try {
+    // Create notification specifically for the guide
+    await Notification.createNotification({
+      sender: {
+        id: studentId,
+        model: "student",
+        name: studentName
+      },
+      recipients: [{
+        id: guide._id,
+        model: "guide"
+      }],
+      title: "New Weekly Report Submission",
+      message: `${studentName} has submitted a new weekly report (Week ${report.reportWeek}).`,
+      type: "WEEKLY_REPORT_SUBMISSION",
+      link: `/guide/weekly-reports/${report._id}`, // Link to view the report
+      priority: "high"
+    });
+    
+    logger.info(`[Notification] Sent weekly report notification to guide ${guide._id}`);
+  } catch (error) {
+    logger.error(`[Notification] Error creating guide notification: ${error.message}`);
     // Don't throw the error as this is a secondary operation
   }
 };

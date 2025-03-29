@@ -63,6 +63,7 @@ const notificationSchema = new mongoose.Schema(
         "INTERNSHIP_COMPLETION_SUBMISSION",
         "INTERNSHIP_STATUS_SUBMISSION",
         "BROADCAST_MESSAGE",
+        "WEEKLY_REPORT_SUBMISSION_GUIDE",
       ],
     },
 
