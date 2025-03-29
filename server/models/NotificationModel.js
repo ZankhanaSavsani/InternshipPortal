@@ -161,7 +161,7 @@ notificationSchema.statics.createNotification = async function ({
     }
     return {
       id: recipient.id,
-      model: recipient.model.toLowerCase(),
+      model: recipient.model,
       isRead: false,
       readAt: null,
     };
